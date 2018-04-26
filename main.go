@@ -21,21 +21,77 @@ package main
 
 import (
 	"database/sql"
+	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sapcc/secgroup-entanglement-exporter/pkg/core"
 	"github.com/sapcc/secgroup-entanglement-exporter/pkg/util"
 )
 
+//Config contains the configuration for the exporter.
+type Config struct {
+	//URI for Neutron DB.
+	PostgresURI string
+	//Address to listen on for Prometheus metrics endpoint.
+	ListenAddress string
+	//Partitions with score higher than this will be logged (default: 50).
+	ScoreLogLimit uint64
+}
+
+func mustGetenv(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		util.LogFatal("missing %s environment variable", key)
+	}
+	return value
+}
+
 func main() {
-	postgresURI := os.Getenv("POSTGRES_URI")
-	if postgresURI == "" {
-		util.LogFatal("missing POSTGRES_URI environment variable")
+	cfg := Config{
+		PostgresURI:   mustGetenv("POSTGRES_URI"),
+		ListenAddress: mustGetenv("LISTEN_ADDRESS"),
+		ScoreLogLimit: 50,
+	}
+	if str := os.Getenv("SCORE_LOG_LIMIT"); str != "" {
+		var err error
+		cfg.ScoreLogLimit, err = strconv.ParseUint(str, 10, 64)
+		if err != nil {
+			util.LogFatal("invalid value for SCORE_LOG_LIMIT: " + err.Error())
+		}
 	}
 
-	db, err := sql.Open("postgres", os.Getenv("POSTGRES_URI"))
+	prometheus.MustRegister(entanglementGauge)
+	go func() {
+		for {
+			collectMetrics(cfg)
+			time.Sleep(5 * time.Minute)
+		}
+	}()
+
+	http.Handle("/metrics", promhttp.Handler())
+	util.LogInfo("listening on " + cfg.ListenAddress)
+	err := http.ListenAndServe(cfg.ListenAddress, nil)
+	if err != nil && err != http.ErrServerClosed {
+		util.LogFatal("ListenAndServe returned: " + err.Error())
+	}
+}
+
+var entanglementGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "security_group_entanglement",
+		Help: "Entanglement score for largest inter-connected set of security groups, per project.",
+	},
+	[]string{"project_id"},
+)
+
+func collectMetrics(cfg Config) {
+	db, err := sql.Open("postgres", cfg.PostgresURI)
 	if err != nil {
 		util.LogFatal("cannot connect to Neutron DB: " + err.Error())
 	}
@@ -55,12 +111,12 @@ func main() {
 				maxScore = score.Value
 			}
 
-			if score.Value > 50 { //TODO make limit configurable
+			if score.Value > cfg.ScoreLogLimit {
 				partition.LogScore(score, projectID)
 			}
 		}
 
-		//TODO: report this as metrics instead
-		util.LogInfo("entanglement for project %s is %d", projectID, maxScore)
+		labels := prometheus.Labels{"project_id": projectID}
+		entanglementGauge.With(labels).Set(float64(maxScore))
 	}
 }
