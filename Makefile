@@ -13,7 +13,7 @@ build: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
 
 install: FORCE build
-	install -D -m 0755 build/$(BIN) "$(DESTDIR)$(PREFIX)/bin/$(BIN)"
+	install -D -m 0755 build/$(BINARY) "$(DESTDIR)$(PREFIX)/bin/$(BINARY)"
 
 vendor: FORCE
 	# vendoring by https://github.com/holocm/golangvend
