@@ -66,7 +66,8 @@ func main() {
 		}
 	}
 
-	prometheus.MustRegister(entanglementGauge)
+	prometheus.MustRegister(maxEntanglementGauge)
+	prometheus.MustRegister(totalEntanglementGauge)
 	go func() {
 		for {
 			collectMetrics(cfg)
@@ -82,10 +83,18 @@ func main() {
 	}
 }
 
-var entanglementGauge = prometheus.NewGaugeVec(
+var maxEntanglementGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "security_group_entanglement",
-		Help: "Entanglement score for largest inter-connected set of security groups, per project.",
+		Name: "security_group_max_entanglement",
+		Help: "Highest entanglement score for an inter-connected set of security groups in this project.",
+	},
+	[]string{"project_id"},
+)
+
+var totalEntanglementGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "security_group_total_entanglement",
+		Help: "Sum of entanglement scores for all inter-connected sets of security groups in this project.",
 	},
 	[]string{"project_id"},
 )
@@ -103,10 +112,14 @@ func collectMetrics(cfg Config) {
 	}
 
 	for projectID, project := range projects {
-		var maxScore uint64
+		var (
+			maxScore   uint64
+			totalScore uint64
+		)
 
 		for _, partition := range project.PartitionSecurityGroups() {
 			score := partition.Score()
+			totalScore += score.Value
 			if maxScore < score.Value {
 				maxScore = score.Value
 			}
@@ -117,6 +130,7 @@ func collectMetrics(cfg Config) {
 		}
 
 		labels := prometheus.Labels{"project_id": projectID}
-		entanglementGauge.With(labels).Set(float64(maxScore))
+		maxEntanglementGauge.With(labels).Set(float64(maxScore))
+		totalEntanglementGauge.With(labels).Set(float64(totalScore))
 	}
 }
