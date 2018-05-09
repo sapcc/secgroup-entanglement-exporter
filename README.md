@@ -55,4 +55,4 @@ entanglement score
 
 This is pretty high for such a small project, so we should try to bring this down. Since the last term is the largest one, we should get rid of the reference from `database` to `appservers`. This can be done by placing all app servers in a separate subnet. When the `database` security group is amended to reference that subnet instead of the `appservers` security group, the entanglement score drops from 14 to 4.
 
-In larger projects, the entanglement graph may not be fully connected. In this case, the entanglement score is calculated separately for each maximal connected subgraph of the entanglement graph. The project's entanglement score is the highest of these subscores.
+In larger projects, the entanglement graph may not be fully connected. In this case, the entanglement score is calculated separately for each maximal connected subgraph of the entanglement graph. The `security_group_max_entanglement` metric reports the highest of these subscores, and the `security_group_total_entanglement` metric is the sum of all subscores.

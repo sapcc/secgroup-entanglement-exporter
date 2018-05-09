@@ -60,7 +60,7 @@ func (p Project) PartitionSecurityGroups() (result []Partition) {
 			partitioned[groupName] = true //do not consider this group for future partitions
 
 			for _, otherGroup := range p.Groups {
-				if group.SharedPortCount[otherGroup.Name] > 0 || group.References[otherGroup.Name] {
+				if group.SharedPortCount[otherGroup.Name] > 0 || group.ReferenceCount[otherGroup.Name] > 0 {
 					if !partitioned[otherGroup.Name] {
 						addRecursively(otherGroup.Name)
 					}
@@ -109,12 +109,12 @@ func (groups Partition) Score() (result Score) {
 
 	for groupName, group := range groups {
 		for otherGroupName, otherGroup := range groups {
-			if group.References[otherGroup.Name] && otherGroup.PortCount > 0 {
+			if group.ReferenceCount[otherGroup.Name] > 0 && otherGroup.PortCount > 0 {
 				result.Factors = append(result.Factors, Factor{
-					Value: otherGroup.PortCount,
+					Value: otherGroup.PortCount * group.ReferenceCount[otherGroup.Name],
 					Reason: fmt.Sprintf(
-						"security group %s has a rule referencing security group %s which contains %d ports",
-						groupName, otherGroupName, otherGroup.PortCount,
+						"security group %s has %d rules referencing security group %s which contains %d ports",
+						groupName, group.ReferenceCount[otherGroup.Name], otherGroupName, otherGroup.PortCount,
 					),
 				})
 			}

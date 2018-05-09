@@ -33,8 +33,8 @@ type SecurityGroup struct {
 	PortCount uint64
 	//How many ports are shared with another security group (key = remote group name).
 	SharedPortCount map[string]uint64
-	//Whether this group contains a remote rule referencing another security group (key = remote group name).
-	References map[string]bool
+	//How many remote rules referencing another security group this group contains (key = remote group name).
+	ReferenceCount map[string]uint64
 }
 
 var securityGroupsQuery = `
@@ -55,7 +55,7 @@ var sharedPortsQuery = `
 `
 
 var remoteReferencesQuery = `
-	SELECT g1.tenant_id, g1.name, g2.name
+	SELECT g1.tenant_id, g1.name, g2.name, COUNT(*)
 	  FROM securitygrouprules r
 	  JOIN securitygroups g1 ON g1.id = r.security_group_id
 	  JOIN securitygroups g2 ON g2.id = r.remote_group_id
@@ -83,7 +83,7 @@ func CollectData(db *sql.DB) (map[string]*Project, error) {
 			Name:            groupName,
 			PortCount:       portCount,
 			SharedPortCount: make(map[string]uint64),
-			References:      make(map[string]bool),
+			ReferenceCount:  make(map[string]uint64),
 		}
 	})
 	if err != nil {
@@ -114,14 +114,15 @@ func CollectData(db *sql.DB) (map[string]*Project, error) {
 	//find security groups with rules referencing other security groups
 	var (
 		remoteGroupName string
+		referenceCount  uint64
 	)
-	err = scan(db, remoteReferencesQuery, args(&projectID, &groupName, &remoteGroupName), func() {
+	err = scan(db, remoteReferencesQuery, args(&projectID, &groupName, &remoteGroupName, &referenceCount), func() {
 		//This is coded defensively, see above.
 		if project, exists := result[projectID]; exists {
 			group, exists := project.Groups[groupName]
 			_, remoteExists := project.Groups[remoteGroupName]
 			if exists && remoteExists {
-				group.References[remoteGroupName] = true
+				group.ReferenceCount[remoteGroupName] = referenceCount
 			}
 		}
 	})
