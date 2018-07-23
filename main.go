@@ -22,8 +22,6 @@ package main
 import (
 	"database/sql"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -34,37 +32,8 @@ import (
 	"github.com/sapcc/secgroup-entanglement-exporter/pkg/util"
 )
 
-//Config contains the configuration for the exporter.
-type Config struct {
-	//URI for Neutron DB.
-	PostgresURI string
-	//Address to listen on for Prometheus metrics endpoint.
-	ListenAddress string
-	//Partitions with score higher than this will be logged (default: 50).
-	ScoreLogLimit uint64
-}
-
-func mustGetenv(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		util.LogFatal("missing %s environment variable", key)
-	}
-	return value
-}
-
 func main() {
-	cfg := Config{
-		PostgresURI:   mustGetenv("POSTGRES_URI"),
-		ListenAddress: mustGetenv("LISTEN_ADDRESS"),
-		ScoreLogLimit: 50,
-	}
-	if str := os.Getenv("SCORE_LOG_LIMIT"); str != "" {
-		var err error
-		cfg.ScoreLogLimit, err = strconv.ParseUint(str, 10, 64)
-		if err != nil {
-			util.LogFatal("invalid value for SCORE_LOG_LIMIT: " + err.Error())
-		}
-	}
+	cfg := core.ReadConfigFromEnv()
 
 	prometheus.MustRegister(maxEntanglementGauge)
 	prometheus.MustRegister(totalEntanglementGauge)
@@ -99,14 +68,14 @@ var totalEntanglementGauge = prometheus.NewGaugeVec(
 	[]string{"project_id"},
 )
 
-func collectMetrics(cfg Config) {
+func collectMetrics(cfg core.Config) {
 	db, err := sql.Open("postgres", cfg.PostgresURI)
 	if err != nil {
 		util.LogFatal("cannot connect to Neutron DB: " + err.Error())
 	}
 	defer db.Close()
 
-	projects, err := core.CollectData(db)
+	projects, err := core.CollectData(db, cfg)
 	if err != nil {
 		util.LogFatal("cannot query Neutron DB: " + err.Error())
 	}
