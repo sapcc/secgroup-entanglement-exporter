@@ -1,3 +1,7 @@
+# ARCHIVED
+
+We don't use VMware DVS anymore, so there is no need for this exporter anymore.
+
 # Security group entanglement exporter
 
 At SAP, we use VMware DVS to apply security groups to VMware instances. Certain
